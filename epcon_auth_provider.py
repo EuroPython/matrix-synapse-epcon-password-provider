@@ -114,29 +114,6 @@ class EpconAuthProvider:
         self.config = config
         logger.info('Endpoint: %s', self.endpoint)
 
-    def get_supported_login_types(self):
-        return {'m.login.password': ('password',)}
-
-    async def check_auth(self, username, login_type, login_dict):
-        """
-        Attempt to authenticate a user using either their email address of
-        epcon username as `username`.
-        """
-        password = login_dict['password']
-
-        if not password:
-            return False
-
-        if username.startswith("@") and ":" in username:
-            # username is of the form @foo:bar.com
-            username = username.split(":", 1)[0][1:]
-
-        if '@' in username and '.' in username:
-            # Simple way to check is the username is actually en email address.
-            return await self.check_3pid_auth('email', username, password)
-
-
-
     def get_rooms_for_user(self, epcondata):
         """
         Apply the rules for room assignment defined above.
