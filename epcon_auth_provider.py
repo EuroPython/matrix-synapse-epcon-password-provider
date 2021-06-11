@@ -92,15 +92,15 @@ ROOM_ACCESS_RULES = {
     "#argument-clinic": isattendee,
     "#sprints": everybody,
     # Sponsor Rooms
-    "sponsor-optiver": everybody,
-    "sponsor-bloomberg": everybody,
-    "sponsor-microsoft": everybody,
-    "sponsor-trayport": everybody,
-    "sponsor-jetbrains": everybody,
-    "sponsor-google-cloud": everybody,
-    "sponsor-numberly": everybody,
-    "sponsor-vonage": everybody,
-    "sponsor-auth0": everybody,
+    "#sponsor-optiver": everybody,
+    "#sponsor-bloomberg": everybody,
+    "#sponsor-microsoft": everybody,
+    "#sponsor-trayport": everybody,
+    "#sponsor-jetbrains": everybody,
+    "#sponsor-google-cloud": everybody,
+    "#sponsor-numberly": everybody,
+    "#sponsor-vonage": everybody,
+    "#sponsor-auth0": everybody,
 }
 
 
