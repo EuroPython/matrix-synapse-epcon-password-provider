@@ -124,6 +124,11 @@ class EpconAuthProvider:
         self.config = config
         logger.info('Endpoint: %s', self.endpoint)
 
+    def get_supported_login_types(self):
+        """Copmpletely take over authentication."""
+
+        return {'m.login.password': ('password',)}
+
     def get_rooms_for_user(self, epcondata):
         """
         Apply the rules for room assignment defined above.
@@ -179,6 +184,39 @@ class EpconAuthProvider:
         rest_config.admin_user = config["admin_user"]
         return rest_config
 
+    async def check_auth(self, username, login_type, login_dict):
+        """
+        Attempt to authenticate a user against an LDAP Server and register an
+        account if none exists.
+
+        Returns:
+            Canonical user ID if authentication against LDAP was successful
+        """
+        password = login_dict['password']
+        # According to section 5.1.2. of RFC 4513 an attempt to log in with
+        # non-empty DN and empty password is called Unauthenticated
+        # Authentication Mechanism of Simple Bind which is used to establish
+        # an anonymous authorization state and not suitable for user
+        # authentication.
+        if not password:
+            return False
+
+        if username.startswith("@") and ":" in username:
+            # username is of the form @foo:bar.com
+            username = username.split(":", 1)[0][1:]
+
+        # Here we do something a bit wild: we see if "username" is an email
+        # address. If so, we defer to self.check_3pid_auth(). Otherwise, we
+        # treat it as a epcon username and auth against the epcon api.
+        if '@' in username and username.find('.') > username.rfind('@'):
+            return await self.check_3pid_auth('email', username, password)
+
+        return await self._generic_auth(
+            username_or_email=username,
+            password=password,
+            authfn=self.auth_with_epcon_username
+        )
+
     async def check_3pid_auth(self, medium, address, password):
         """
         Handle authentication against thirdparty login types, such as email
@@ -196,22 +234,34 @@ class EpconAuthProvider:
             logger.debug("Not going to auth medium: %s, address: %s",
                          medium, address)
             return None
+        return await self._generic_auth(
+            username_or_email=address,
+            password=password,
+            authfn=self.auth_with_epcon_email
+        )
 
-        logger.info("Going to check auth for %s", address)
+    async def _generic_auth(self, username_or_email, password, authfn):
+        logger.info("Going to check auth for %s", username_or_email)
 
-        epcondata = await self.auth_with_epcon(address, password)
+        epcondata = await authfn(username_or_email, password)
+
         if not epcondata:
-            logger.info("Auth failed for %s", address)
+            logger.info("Auth failed for %s", username_or_email)
             raise SynapseError(code=400, errcode="no_tickets_found",
                                msg='Login failed: auth API error.')
 
         logger.info("%s successfully authenticated with epcon. profile: %s",
-                    address, epcondata)
+                    username_or_email, epcondata)
+
+        return await self._setup_user(password, epcondata)
+
+    async def _setup_user(self, password, epcondata):
+        email = epcondata['email']
 
         # If no tickets found inside epcondata return false.
         tickets = epcondata.get("tickets", None)
         if not tickets:
-            logger.info("Auth failed for %s - no tickets found", address)
+            logger.info(f"Auth failed for {email} - no tickets found")
             raise SynapseError(code=400, errcode="no_tickets_found",
                                msg='Login failed: No tickets found for user.')
 
@@ -221,8 +271,7 @@ class EpconAuthProvider:
             await self.apply_user_policies(user_id, epcondata)
         except Exception as e:
             logger.error("Error joining rooms :%r", e)
-        logger.info("User registered. address: '%s' user_id: '%s'",
-                    address, user_id)
+        logger.info(f"User registered. email: '{email}' user_id: '{user_id}'")
         return user_id
 
     async def apply_user_policies(self, user_id, epcondata):
@@ -340,14 +389,29 @@ class EpconAuthProvider:
         )
         return user_id
 
-    async def auth_with_epcon(self, email, password):
+    async def auth_with_epcon_email(self, email, password):
+        return await self._auth_with_epcon(
+            {"email": email, "password": password}
+        )
+
+    async def auth_with_epcon_username(self, username, password):
+        return await self._auth_with_epcon(
+            {"username": username, "password": password}
+        )
+
+    async def _auth_with_epcon(self, payload):
         try:
             result = await self.http_client.post_json_get_json(
-                self.endpoint, {"email": email, "password": password})
+                payload
+            )
         except HttpResponseException as e:
             raise e.to_synapse_error() from e
+
+        # remove password
+        del(payload['password'])
+
         if "error" in result:
-            logger.info("Error authenticating '%s'", email)
+            logger.info(f"Error authenticating '{payload}'")
             logger.info("Error message %s", result.get("message"))
             return False
         return result
