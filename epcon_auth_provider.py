@@ -402,6 +402,7 @@ class EpconAuthProvider:
     async def _auth_with_epcon(self, payload):
         try:
             result = await self.http_client.post_json_get_json(
+                self.endpoint,
                 payload
             )
         except HttpResponseException as e:
