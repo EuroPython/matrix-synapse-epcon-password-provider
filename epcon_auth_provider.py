@@ -60,7 +60,7 @@ def isadmin(epcondata):
 
 def isattendee(epcondata):
     for ticket in epcondata["tickets"]:
-        if ticket["fare_code"] in FARE['combined'] or FARE['conference']:
+        if ticket["fare_code"] in FARE['combined'] + FARE['conference']:
             return True
     return False
 
@@ -135,8 +135,18 @@ class EpconAuthProvider:
 
         Remember: room names need to be decorated with homeserver name...
         """
+        # room_aliases = []
+        # for room_alias, rule in self.room_rules.items():
+        #     logger.info(f'Checking membership for room {room_alias}: ')
+        #     logger.info(f'    epcondata: {epcondata}')
+        #     if rule(epcondata) is True:
+        #         logger.info('      OK')
+        #         room_aliases.append(room_alias)
+        #     else:
+        #         logger.info('      FAIL')
+        # return room_aliases
         return {
-            room_name for room_name, rule in self.room_rules.items()
+            room_alias for room_alias, rule in self.room_rules.items()
             if rule(epcondata)
         }
 
@@ -270,7 +280,7 @@ class EpconAuthProvider:
         try:
             await self.apply_user_policies(user_id, epcondata)
         except Exception as e:
-            logger.error("Error joining rooms :%r", e)
+            logger.error("Error setting up rooms :%r", e)
         logger.info(f"User registered. email: '{email}' user_id: '{user_id}'")
         return user_id
 
@@ -289,19 +299,36 @@ class EpconAuthProvider:
 
         # Get the list of rooms the user already belongs to and check against
         # our rules.
-        # Our user already belongss to the following rooms:
-        room_ids = await self.store.get_rooms_for_user(user_id)
-        # Our user should be a member of the following rooms:
-        rooms_to_join = self.get_rooms_for_user(epcondata)
+        # Our user already belongss to the following rooms (remember that these
+        # are room IDs, not room aliases and they are strings, not objects!):
+        in_room_ids = await self.store.get_rooms_for_user(user_id)
+        # Our user should be a member of the following rooms (remember that
+        # these are room aliases, not room IDs!):
+        rooms_aliases_to_join = self.get_rooms_for_user(epcondata)
+        logger.info(f'User {user_id} can join {rooms_aliases_to_join}')
+
+        # Turn everything in room ids (strings, not objects):
+        room_ids_to_join = []
+        room_hanlder = self.hs.get_room_member_handler()
+        for room_alias in rooms_aliases_to_join:
+            room_id, _ = await room_hanlder.lookup_room_alias(
+                RoomAlias.from_string(room_alias)
+            )
+            room_ids_to_join.append(room_id.to_string())
 
         # Make sure that the two lists above are not at odds with each other.
-        rooms_to_leave = set(room_ids) - set(rooms_to_join)
+        room_ids_to_leave = set(in_room_ids) - set(room_ids_to_join)
+        logger.info(
+            f'User {user_id} will be asked to leave {room_ids_to_leave}'
+        )
+        logger.info(
+            f'User {user_id} will be assigned to {room_ids_to_join}'
+        )
 
         # First make sure that we remove user from rooms_to_leave.
-        for room_alias in rooms_to_leave:
-            # FIXME: remove the user
+        for room_id in room_ids_to_leave:
             try:
-                await self._update_room_membership(user_id, room_alias,
+                await self._update_room_membership(user_id, room_id,
                                                    action=Membership.LEAVE)
             except Exception as e:
                 logger.error("Eror removing %s to %s: %r",
@@ -309,33 +336,27 @@ class EpconAuthProvider:
 
         # Now add user_id to the rooms they need to join (skipping the ones
         # they are in already).
-        for room_alias in set(rooms_to_join) - set(room_ids):
+        for room_id in set(room_ids_to_join) - set(in_room_ids):
             try:
-                await self._update_room_membership(user_id, room_alias,
+                await self._update_room_membership(user_id, room_id,
                                                    action=Membership.JOIN)
             except Exception as e:
                 logger.error("Eror adding %s to %s: %r",
                              user_id, room_alias, e)
 
-    async def _update_room_membership(self, user_id, room_alias, action):
+    async def _update_room_membership(self, user_id, room_id, action):
         """
         Either kick user_id out of the room (action=Membership.LEAVE) or
         invite them (action=Membership.JOIN).
         """
         room_hanlder = self.hs.get_room_member_handler()
 
-        room_id, _ = await room_hanlder.lookup_room_alias(
-            RoomAlias.from_string(room_alias)
-        )
-        logger.info("room_id for room_alias '%s' is: '%s'",
-                    room_alias, room_id)
-
-        logger.info("Adding %s to room: %s", user_id, room_alias)
         if action == Membership.JOIN:
+            logger.info("Adding %s to room: %s", user_id, room_id)
             await room_hanlder.update_membership(
                 requester=create_requester(self.admin_user),
                 target=UserID.from_string(user_id),
-                room_id=room_id.to_string(),
+                room_id=room_id,
                 action=Membership.INVITE,
                 ratelimit=False,
             )
@@ -343,15 +364,16 @@ class EpconAuthProvider:
             await room_hanlder.update_membership(
                 requester=create_requester(user_id),
                 target=UserID.from_string(user_id),
-                room_id=room_id.to_string(),
+                room_id=room_id,
                 action=Membership.JOIN,
                 ratelimit=False,
             )
         elif action == Membership.LEAVE:
+            logger.info("Removing %s from room: %s", user_id, room_id)
             await room_hanlder.update_membership(
                 requester=create_requester(user_id),
                 target=UserID.from_string(user_id),
-                room_id=room_id.to_string(),
+                room_id=room_id,
                 action=Membership.LEAVE,
                 ratelimit=False,
             )
