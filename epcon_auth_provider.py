@@ -240,7 +240,6 @@ class EpconAuthProvider:
 
         # Get the list of rooms the user already belongs to and check against
         # our rules.
-        room_hanlder = self.hs.get_room_member_handler()
         # Our user already belongss to the following rooms:
         room_ids = await self.store.get_rooms_for_user(user_id)
         # Our user should be a member of the following rooms:
@@ -252,40 +251,63 @@ class EpconAuthProvider:
         # First make sure that we remove user from rooms_to_leave.
         for room_alias in rooms_to_leave:
             # FIXME: remove the user
-            logger.info(f'FIXME: remove {user_id} from {room_alias}')
-
-        for room_alias in rooms_to_join:
             try:
-                room_id, _ = await room_hanlder.lookup_room_alias(
-                    RoomAlias.from_string(room_alias)
-                )
-                logger.info("room_id for room_alias '%s' is: '%s'",
-                            room_alias, room_id)
-                if room_id.to_string() in room_ids:
-                    logger.info("%s is already a member of %s",
-                                user_id, room_alias)
-                    continue
+                await self._update_room_membership(user_id, room_alias,
+                                                   action=Membership.LEAVE)
+            except Exception as e:
+                logger.error("Eror removing %s to %s: %r",
+                             user_id, room_alias, e)
 
-                logger.info("Adding %s to room: %s", user_id, room_alias)
-                await room_hanlder.update_membership(
-                    requester=create_requester(self.admin_user),
-                    target=UserID.from_string(user_id),
-                    room_id=room_id.to_string(),
-                    action=Membership.INVITE,
-                    ratelimit=False,
-                )
-                # force join
-                room_hanlder = self.hs.get_room_member_handler()
-                await room_hanlder.update_membership(
-                    requester=create_requester(user_id),
-                    target=UserID.from_string(user_id),
-                    room_id=room_id.to_string(),
-                    action=Membership.JOIN,
-                    ratelimit=False,
-                )
+        # Now add user_id to the rooms they need to join (skipping the ones
+        # they are in already).
+        for room_alias in set(rooms_to_join) - set(room_ids):
+            try:
+                await self._update_room_membership(user_id, room_alias,
+                                                   action=Membership.JOIN)
             except Exception as e:
                 logger.error("Eror adding %s to %s: %r",
                              user_id, room_alias, e)
+
+    async def _update_room_membership(self, user_id, room_alias, action):
+        """
+        Either kick user_id out of the room (action=Membership.LEAVE) or
+        invite them (action=Membership.JOIN).
+        """
+        room_hanlder = self.hs.get_room_member_handler()
+
+        room_id, _ = await room_hanlder.lookup_room_alias(
+            RoomAlias.from_string(room_alias)
+        )
+        logger.info("room_id for room_alias '%s' is: '%s'",
+                    room_alias, room_id)
+
+        logger.info("Adding %s to room: %s", user_id, room_alias)
+        if action == Membership.JOIN:
+            await room_hanlder.update_membership(
+                requester=create_requester(self.admin_user),
+                target=UserID.from_string(user_id),
+                room_id=room_id.to_string(),
+                action=Membership.INVITE,
+                ratelimit=False,
+            )
+            # force join
+            await room_hanlder.update_membership(
+                requester=create_requester(user_id),
+                target=UserID.from_string(user_id),
+                room_id=room_id.to_string(),
+                action=Membership.JOIN,
+                ratelimit=False,
+            )
+        elif action == Membership.LEAVE:
+            await room_hanlder.update_membership(
+                requester=create_requester(user_id),
+                target=UserID.from_string(user_id),
+                room_id=room_id.to_string(),
+                action=Membership.LEAVE,
+                ratelimit=False,
+            )
+        else:
+            raise NotImplementedError(f'Unsupported action {action}')
 
     def get_local_part(self, epcondata):
         return epcondata["username"]
