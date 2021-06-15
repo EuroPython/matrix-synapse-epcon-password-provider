@@ -51,6 +51,8 @@ FARE = {
 
 
 def isspeaker(epcondata):
+    if isadmin(epcondata):
+        return True
     return epcondata['is_speaker'] is True
 
 
@@ -59,6 +61,8 @@ def isadmin(epcondata):
 
 
 def isconference_attendee(epcondata):
+    if isadmin(epcondata):
+        return True
     for ticket in epcondata["tickets"]:
         if ticket["fare_code"] in FARE['conference']:
             return True
@@ -66,6 +70,8 @@ def isconference_attendee(epcondata):
 
 
 def istraining_attendee(epcondata):
+    if isadmin(epcondata):
+        return True
     for ticket in epcondata["tickets"]:
         if ticket["fare_code"] in FARE['combined']:
             return True
@@ -73,12 +79,9 @@ def istraining_attendee(epcondata):
 
 
 def isattendee(epcondata):
+    if isadmin(epcondata):
+        return True
     return isconference_attendee(epcondata) or istraining_attendee(epcondata)
-
-
-def issprinter(epcondata):
-    # If they got here, they are sprinters :-)
-    return True
 
 
 def everybody(epcondata):
