@@ -58,11 +58,22 @@ def isadmin(epcondata):
     return epcondata['is_staff'] is True
 
 
-def isattendee(epcondata):
+def isconference_attendee(epcondata):
     for ticket in epcondata["tickets"]:
-        if ticket["fare_code"] in FARE['combined'] + FARE['conference']:
+        if ticket["fare_code"] in FARE['conference']:
             return True
     return False
+
+
+def istraining_attendee(epcondata):
+    for ticket in epcondata["tickets"]:
+        if ticket["fare_code"] in FARE['combined']:
+            return True
+    return False
+
+
+def isattendee(epcondata):
+    return isconference_attendee(epcondata) or istraining_attendee(epcondata)
 
 
 def issprinter(epcondata):
@@ -78,20 +89,13 @@ def everybody(epcondata):
 PUBLIC_ROOM_RULES = (everybody, )
 
 ROOM_ACCESS_RULES = {
-    "#info-desk": everybody,
-    "#hallway": everybody,
-    "#announcements": everybody,
-    "#staff": isadmin,
-    "#speakers": isspeaker,
-    "#coc": everybody,
-    "#optiver": isattendee,
-    "#brian": isattendee,
-    "#ni": isattendee,
-    "#parrot": isattendee,
-    "#silly-walks": isattendee,
-    "#argument-clinic": isattendee,
-    "#sprints": everybody,
-    # Sponsor Rooms
+    # Lobby
+    "#lobby-announcements": everybody,
+    "#lobby-info-desk": everybody,
+    "#lobby-hallway": isattendee,
+    "#lobby-jobs": everybody,
+    # Sponsors
+    "#sponsor-info-desk": isadmin,
     "#sponsor-optiver": everybody,
     "#sponsor-bloomberg": everybody,
     "#sponsor-microsoft": everybody,
@@ -101,6 +105,50 @@ ROOM_ACCESS_RULES = {
     "#sponsor-numberly": everybody,
     "#sponsor-vonage": everybody,
     "#sponsor-auth0": everybody,
+    # Trainings
+    "#training-optiver": istraining_attendee,
+    "#training-brian": istraining_attendee,
+    "#training-ni": istraining_attendee,
+    "#training-parrot": istraining_attendee,
+    "#training-silly-walks": isattendee,
+    "#training-argument-clinic": isattendee,
+    # Main tracks
+    "#conference-optiver": isattendee,
+    "#conference-brian": isattendee,
+    "#conference-ni": isattendee,
+    "#conference-parrot": isattendee,
+    "#conference-silly-walks": isattendee,
+    "#conference-argument-clinic": isattendee,
+    "#conference-open-space": isattendee,
+    "#conference-poster-interactive": isattendee,
+    # Breakouts
+    "#breakout-optiver": isattendee,
+    "#breakout-brian": isattendee,
+    "#breakout-ni": isattendee,
+    "#breakout-parrot": isattendee,
+    "#breakout-silly-walks": isattendee,
+    "#breakout-argument-clinic": isattendee,
+    # Sprints
+    "#sprint-hallway": everybody,
+    "#sprint-01": everybody,
+    "#sprint-02": everybody,
+    "#sprint-03": everybody,
+    "#sprint-04": everybody,
+    "#sprint-05": everybody,
+    "#sprint-06": everybody,
+    "#sprint-07": everybody,
+    "#sprint-08": everybody,
+    "#sprint-09": everybody,
+    "#sprint-10": everybody,
+    "#sprint-11": everybody,
+    "#sprint-12": everybody,
+    "#sprint-13": everybody,
+    "#sprint-14": everybody,
+    "#sprint-15": everybody,
+    # Backstage
+    "#backstage-speakers": isspeaker,
+    "#backstage-organizers": isadmin,
+    "#backstage-gonzo": isadmin,
 }
 
 
