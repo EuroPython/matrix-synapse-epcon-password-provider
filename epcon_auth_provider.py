@@ -122,15 +122,11 @@ ROOM_ACCESS_RULES = {
     "#conference-parrot": isattendee,
     "#conference-silly-walks": isattendee,
     "#conference-argument-clinic": isattendee,
-    "#conference-open-space": isattendee,
-    "#conference-poster-interactive": isattendee,
     # Breakouts
     "#breakout-optiver": isattendee,
     "#breakout-brian": isattendee,
     "#breakout-ni": isattendee,
     "#breakout-parrot": isattendee,
-    "#breakout-silly-walks": isattendee,
-    "#breakout-argument-clinic": isattendee,
     # Sprints
     "#sprint-hallway": everybody,
     "#sprint-01": everybody,
