@@ -153,6 +153,8 @@ ROOM_ACCESS_RULES = {
 
 class EpconAuthProvider:
     def __init__(self, config, account_handler, room_rules=ROOM_ACCESS_RULES):
+        # NOTE: we cannot pre-define all handlers here as we get an error from
+        # synapse about cyclic dependencies.
         self.account_handler = account_handler
         self.hs = account_handler._hs
         self.http_client = account_handler._http_client
@@ -343,6 +345,22 @@ class EpconAuthProvider:
         # If the user is an admin and rooms were not created yet, create them.
         if user_id == self.admin_user:
             await self.create_epcon_rooms()
+
+        # Set event visibility preference to avoid lots of noise in rooms.
+        user_pref_handler = self.hs.get_account_data_handler()
+        preferences = {
+            "breadcrumbs": True,
+            "hideReadReceipts": True,
+            "hideRedactions": True,
+            "hideJoinLeaves": True,
+            "hideAvatarChanges": True,
+            "hideDisplaynameChanges": True,
+            "TagPanel.disableTagPanel": True,
+        }
+        await user_pref_handler.add_account_data_for_user(
+            user_id,
+            'im.vector.web.settings',
+            preferences)
 
         # Get the list of rooms the user already belongs to and check against
         # our rules.
