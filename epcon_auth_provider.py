@@ -446,7 +446,24 @@ class EpconAuthProvider:
             raise NotImplementedError(f'Unsupported action {action}')
 
     def get_local_part(self, epcondata):
-        return epcondata["username"]
+        # Here we have an issue: Matrix does not accept usernames that only 
+        # contain digits, that start with _, etc. We will try our best to
+        # comply.
+        username = epcondata["username"]
+        if username.isdigit():
+            username = f'g{username}'
+        elif username.startswith('_'):
+            username = username[1:]
+        # Django allows @ but Matrix does not.
+        if '@' in username:
+            username = username.replace('@', '')
+        # Matrix does not like usernames longer than 255 chars
+        if len(username) > 255:
+            username = username[:255]
+        # We still need some chars
+        if not username:
+            raise ValueError('Invalid username')
+        return username
 
     async def get_or_create_userid(self, epcondata, password):
         """
