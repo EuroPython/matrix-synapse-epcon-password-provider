@@ -333,9 +333,12 @@ class EpconAuthProvider:
         logger.info(f"User registered. email: '{email}' user_id: '{user_id}'")
         return user_id
 
-    async def apply_user_policies(self, user_id, epcondata):
+    async def apply_user_policies(self, user_id, epcondata, force_evict=False):
         """
         Assign the user to the relevant rooms (creating them if needed).
+
+        if `force_evict` is True, kick `user_id` from rooms they should not be
+        in, according to their ticket type. HANDLE WITH CARE
 
         Some notes:
         * Rooms are created the first time an admin user logs in.
@@ -372,42 +375,47 @@ class EpconAuthProvider:
         rooms_aliases_to_join = self.get_rooms_for_user(epcondata)
         logger.info(f'User {user_id} can join {rooms_aliases_to_join}')
 
-        # Turn everything in room ids (strings, not objects):
-        room_ids_to_join = []
+        # Make sure that the user is in the rooms they are supposed to be. Do
+        # not kick them out of rooms they should not be unless we are really
+        # sure we want to do that (see force_evict argument).
+        room_ids_to_join = set()
         room_hanlder = self.hs.get_room_member_handler()
         for room_alias in rooms_aliases_to_join:
             room_id, _ = await room_hanlder.lookup_room_alias(
                 RoomAlias.from_string(room_alias)
             )
-            room_ids_to_join.append(room_id.to_string())
+            room_id = room_id.to_string()
+            room_ids_to_join.add(room_id)
 
-        # Make sure that the two lists above are not at odds with each other.
-        room_ids_to_leave = set(in_room_ids) - set(room_ids_to_join)
-        logger.info(
-            f'User {user_id} will be asked to leave {room_ids_to_leave}'
-        )
-        logger.info(
-            f'User {user_id} will be assigned to {room_ids_to_join}'
-        )
+            # Add user_id to the room if not there already.
+            if room_id in in_room_ids:
+                continue
 
-        # First make sure that we remove user from rooms_to_leave.
-        for room_id in room_ids_to_leave:
-            try:
-                await self._update_room_membership(user_id, room_id,
-                                                   action=Membership.LEAVE)
-            except Exception as e:
-                logger.error("Eror removing %s to %s: %r",
-                             user_id, room_alias, e)
-
-        # Now add user_id to the rooms they need to join (skipping the ones
-        # they are in already).
-        for room_id in set(room_ids_to_join) - set(in_room_ids):
             try:
                 await self._update_room_membership(user_id, room_id,
                                                    action=Membership.JOIN)
             except Exception as e:
                 logger.error("Eror adding %s to %s: %r",
                              user_id, room_alias, e)
+            else:
+                logger.info(
+                    f'User {user_id} added to {room_id}'
+                )
+
+        if force_evict:
+            room_ids_to_leave = in_room_ids - room_ids_to_join
+            logger.info(
+                f'User {user_id} will be asked to leave {room_ids_to_leave}'
+            )
+
+            # First make sure that we remove user from rooms_to_leave.
+            for room_id in room_ids_to_leave:
+                try:
+                    await self._update_room_membership(user_id, room_id,
+                                                       action=Membership.LEAVE)
+                except Exception as e:
+                    logger.error("Eror removing %s to %s: %r",
+                                 user_id, room_alias, e)
 
     async def _update_room_membership(self, user_id, room_id, action):
         """
@@ -446,7 +454,7 @@ class EpconAuthProvider:
             raise NotImplementedError(f'Unsupported action {action}')
 
     def get_local_part(self, epcondata):
-        # Here we have an issue: Matrix does not accept usernames that only 
+        # Here we have an issue: Matrix does not accept usernames that only
         # contain digits, that start with _, etc. We will try our best to
         # comply.
         username = epcondata["username"]
