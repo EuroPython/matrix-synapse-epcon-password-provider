@@ -496,7 +496,7 @@ class EpconAuthProvider:
             password=password,
             admin=epcondata['is_staff']
         )
-        device_id, access_token = await self.account_handler.register_device(
+        device_id, *access_token = await self.account_handler.register_device(
             user_id
         )
         return user_id
