@@ -78,6 +78,15 @@ def istraining_attendee(epcondata):
     return False
 
 
+def issprint_attendee(epcondata):
+    if isadmin(epcondata):
+        return True
+    for ticket in epcondata["tickets"]:
+        if ticket["fare_code"] in FARE['sprint']:
+            return True
+    return False
+
+
 def isattendee(epcondata):
     if isadmin(epcondata):
         return True
@@ -85,7 +94,7 @@ def isattendee(epcondata):
 
 
 def everybody(epcondata):
-    return True
+    return isattendee(epcondata) or issprint_attendee(epcondata)
 
 
 # We decide these rules
@@ -245,8 +254,7 @@ class EpconAuthProvider:
 
     async def check_auth(self, username, login_type, login_dict):
         """
-        Attempt to authenticate a user against an LDAP Server and register an
-        account if none exists.
+        Attempt to authenticate a user using username and password.
 
         Returns:
             Canonical user ID if authentication against LDAP was successful
