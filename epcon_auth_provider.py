@@ -312,7 +312,7 @@ class EpconAuthProvider:
 
         epcondata = await authfn(username_or_email, password)
 
-        if not epcondata:
+        if not epcondata or not everybody(epcondata):
             logger.info("Auth failed for %s", username_or_email)
             raise SynapseError(code=400, errcode="no_tickets_found",
                                msg='Login failed: auth API error.')
